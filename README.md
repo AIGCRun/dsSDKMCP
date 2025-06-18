@@ -1,6 +1,6 @@
 # Acctest Python API library
 
-[![PyPI version](https://img.shields.io/pypi/v/acctest.svg)](https://pypi.org/project/acctest/)
+[![PyPI version](<https://img.shields.io/pypi/v/acctest.svg?label=pypi%20(stable)>)](https://pypi.org/project/acctest/)
 
 The Acctest Python library provides convenient access to the Acctest REST API from any Python 3.8+
 application. The library includes type definitions for all request params and response fields,
