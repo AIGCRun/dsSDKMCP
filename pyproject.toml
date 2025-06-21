@@ -37,6 +37,8 @@ classifiers = [
 Homepage = "https://github.com/AIGCRun/dsSDKMCP"
 Repository = "https://github.com/AIGCRun/dsSDKMCP"
 
+[project.optional-dependencies]
+aiohttp = ["aiohttp", "httpx_aiohttp>=0.1.6"]
 
 [tool.rye]
 managed = true
