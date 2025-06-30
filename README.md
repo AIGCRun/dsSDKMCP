@@ -1,6 +1,6 @@
 # Acctest Python API library
 
-[![PyPI version](https://img.shields.io/pypi/v/acctest.svg)](https://pypi.org/project/acctest/)
+[![PyPI version](<https://img.shields.io/pypi/v/acctest.svg?label=pypi%20(stable)>)](https://pypi.org/project/acctest/)
 
 The Acctest Python library provides convenient access to the Acctest REST API from any Python 3.8+
 application. The library includes type definitions for all request params and response fields,
@@ -15,12 +15,9 @@ The full API of this library can be found in [api.md](api.md).
 ## Installation
 
 ```sh
-# install from this staging repo
-pip install git+ssh://git@github.com/stainless-sdks/acctest-python.git
+# install from PyPI
+pip install acctest
 ```
-
-> [!NOTE]
-> Once this package is [published to PyPI](https://app.stainless.com/docs/guides/publish), this will become: `pip install --pre acctest`
 
 ## Usage
 
@@ -108,6 +105,59 @@ asyncio.run(main())
 ```
 
 Functionality between the synchronous and asynchronous clients is otherwise identical.
+
+### With aiohttp
+
+By default, the async client uses `httpx` for HTTP requests. However, for improved concurrency performance you may also use `aiohttp` as the HTTP backend.
+
+You can enable this by installing `aiohttp`:
+
+```sh
+# install from PyPI
+pip install acctest[aiohttp]
+```
+
+Then you can enable it by instantiating the client with `http_client=DefaultAioHttpClient()`:
+
+```python
+import os
+import asyncio
+from acctest import DefaultAioHttpClient
+from acctest import AsyncAcctest
+
+
+async def main() -> None:
+    async with AsyncAcctest(
+        api_key=os.environ.get("ACCTEST_API_KEY"),  # This is the default and can be omitted
+        http_client=DefaultAioHttpClient(),
+    ) as client:
+        response = await client.chat.create_completion(
+            frequency_penalty=0,
+            logprobs=True,
+            max_tokens=0,
+            messages=[
+                {
+                    "content": "content",
+                    "role": "role",
+                }
+            ],
+            model="REPLACE_ME",
+            presence_penalty=0,
+            response_format={"type": "type"},
+            stop=None,
+            stream=True,
+            stream_options=None,
+            temperature=0,
+            tool_choice="REPLACE_ME",
+            tools=None,
+            top_logprobs=None,
+            top_p=0,
+        )
+        print(response.id)
+
+
+asyncio.run(main())
+```
 
 ## Using types
 
@@ -263,7 +313,7 @@ client.with_options(max_retries=5).chat.create_completion(
 ### Timeouts
 
 By default requests time out after 1 minute. You can configure this with a `timeout` option,
-which accepts a float or an [`httpx.Timeout`](https://www.python-httpx.org/advanced/#fine-tuning-the-configuration) object:
+which accepts a float or an [`httpx.Timeout`](https://www.python-httpx.org/advanced/timeouts/#fine-tuning-the-configuration) object:
 
 ```python
 from acctest import Acctest
@@ -370,9 +420,9 @@ chat = response.parse()  # get the object that `chat.create_completion()` would 
 print(chat.id)
 ```
 
-These methods return an [`APIResponse`](https://github.com/stainless-sdks/acctest-python/tree/main/src/acctest/_response.py) object.
+These methods return an [`APIResponse`](https://github.com/AIGCRun/dsSDKMCP/tree/main/src/acctest/_response.py) object.
 
-The async client returns an [`AsyncAPIResponse`](https://github.com/stainless-sdks/acctest-python/tree/main/src/acctest/_response.py) with the same structure, the only difference being `await`able methods for reading the response content.
+The async client returns an [`AsyncAPIResponse`](https://github.com/AIGCRun/dsSDKMCP/tree/main/src/acctest/_response.py) with the same structure, the only difference being `await`able methods for reading the response content.
 
 #### `.with_streaming_response`
 
@@ -497,7 +547,7 @@ This package generally follows [SemVer](https://semver.org/spec/v2.0.0.html) con
 
 We take backwards-compatibility seriously and work hard to ensure you can rely on a smooth upgrade experience.
 
-We are keen for your feedback; please open an [issue](https://www.github.com/stainless-sdks/acctest-python/issues) with questions, bugs, or suggestions.
+We are keen for your feedback; please open an [issue](https://www.github.com/AIGCRun/dsSDKMCP/issues) with questions, bugs, or suggestions.
 
 ### Determining the installed version
 
