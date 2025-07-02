@@ -23,17 +23,16 @@ from pydantic import ValidationError
 
 from acctest import Acctest, AsyncAcctest, APIResponseValidationError
 from acctest._types import Omit
-from acctest._utils import maybe_transform
 from acctest._models import BaseModel, FinalRequestOptions
-from acctest._constants import RAW_RESPONSE_HEADER
 from acctest._exceptions import APIStatusError, APITimeoutError, APIResponseValidationError
 from acctest._base_client import (
     DEFAULT_TIMEOUT,
     HTTPX_DEFAULT_TIMEOUT,
     BaseClient,
+    DefaultHttpxClient,
+    DefaultAsyncHttpxClient,
     make_request_options,
 )
-from acctest.types.chat_create_completion_params import ChatCreateCompletionParams
 
 from .utils import update_env
 
@@ -192,6 +191,7 @@ class TestAcctest:
             copy_param = copy_signature.parameters.get(name)
             assert copy_param is not None, f"copy() signature is missing the {name} param"
 
+    @pytest.mark.skipif(sys.version_info >= (3, 10), reason="fails because of a memory leak that started from 3.12")
     def test_copy_build_request(self) -> None:
         options = FinalRequestOptions(method="get", url="/foo")
 
@@ -701,86 +701,71 @@ class TestAcctest:
 
     @mock.patch("acctest._base_client.BaseClient._calculate_retry_timeout", _low_retry_timeout)
     @pytest.mark.respx(base_url=base_url)
-    def test_retrying_timeout_errors_doesnt_leak(self, respx_mock: MockRouter) -> None:
+    def test_retrying_timeout_errors_doesnt_leak(self, respx_mock: MockRouter, client: Acctest) -> None:
         respx_mock.post("/chat/completions").mock(side_effect=httpx.TimeoutException("Test timeout error"))
 
         with pytest.raises(APITimeoutError):
-            self.client.post(
-                "/chat/completions",
-                body=cast(
-                    object,
-                    maybe_transform(
-                        dict(
-                            frequency_penalty=0,
-                            logprobs=True,
-                            max_tokens=0,
-                            messages=[
-                                {
-                                    "content": "content",
-                                    "role": "role",
-                                }
-                            ],
-                            model="REPLACE_ME",
-                            presence_penalty=0,
-                            response_format={"type": "type"},
-                            stop=None,
-                            stream=True,
-                            stream_options=None,
-                            temperature=0,
-                            tool_choice="REPLACE_ME",
-                            tools=None,
-                            top_logprobs=None,
-                            top_p=0,
-                        ),
-                        ChatCreateCompletionParams,
-                    ),
-                ),
-                cast_to=httpx.Response,
-                options={"headers": {RAW_RESPONSE_HEADER: "stream"}},
-            )
+            client.chat.with_streaming_response.create_completion(
+                frequency_penalty=0,
+                logprobs=False,
+                max_tokens=2048,
+                messages=[
+                    {
+                        "content": "You are a helpful assistant",
+                        "role": "system",
+                    },
+                    {
+                        "content": "Hi",
+                        "role": "user",
+                    },
+                ],
+                model="deepseek-chat",
+                presence_penalty=0,
+                response_format={"type": "text"},
+                stop=None,
+                stream=False,
+                stream_options=None,
+                temperature=1,
+                tool_choice="none",
+                tools=None,
+                top_logprobs=None,
+                top_p=1,
+            ).__enter__()
 
         assert _get_open_connections(self.client) == 0
 
     @mock.patch("acctest._base_client.BaseClient._calculate_retry_timeout", _low_retry_timeout)
     @pytest.mark.respx(base_url=base_url)
-    def test_retrying_status_errors_doesnt_leak(self, respx_mock: MockRouter) -> None:
+    def test_retrying_status_errors_doesnt_leak(self, respx_mock: MockRouter, client: Acctest) -> None:
         respx_mock.post("/chat/completions").mock(return_value=httpx.Response(500))
 
         with pytest.raises(APIStatusError):
-            self.client.post(
-                "/chat/completions",
-                body=cast(
-                    object,
-                    maybe_transform(
-                        dict(
-                            frequency_penalty=0,
-                            logprobs=True,
-                            max_tokens=0,
-                            messages=[
-                                {
-                                    "content": "content",
-                                    "role": "role",
-                                }
-                            ],
-                            model="REPLACE_ME",
-                            presence_penalty=0,
-                            response_format={"type": "type"},
-                            stop=None,
-                            stream=True,
-                            stream_options=None,
-                            temperature=0,
-                            tool_choice="REPLACE_ME",
-                            tools=None,
-                            top_logprobs=None,
-                            top_p=0,
-                        ),
-                        ChatCreateCompletionParams,
-                    ),
-                ),
-                cast_to=httpx.Response,
-                options={"headers": {RAW_RESPONSE_HEADER: "stream"}},
-            )
-
+            client.chat.with_streaming_response.create_completion(
+                frequency_penalty=0,
+                logprobs=False,
+                max_tokens=2048,
+                messages=[
+                    {
+                        "content": "You are a helpful assistant",
+                        "role": "system",
+                    },
+                    {
+                        "content": "Hi",
+                        "role": "user",
+                    },
+                ],
+                model="deepseek-chat",
+                presence_penalty=0,
+                response_format={"type": "text"},
+                stop=None,
+                stream=False,
+                stream_options=None,
+                temperature=1,
+                tool_choice="none",
+                tools=None,
+                top_logprobs=None,
+                top_p=1,
+            ).__enter__()
         assert _get_open_connections(self.client) == 0
 
     @pytest.mark.parametrize("failures_before_success", [0, 2, 4])
@@ -936,6 +921,28 @@ class TestAcctest:
         )
 
         assert response.http_request.headers.get("x-stainless-retry-count") == "42"
+
+    def test_proxy_environment_variables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Test that the proxy environment variables are set correctly
+        monkeypatch.setenv("HTTPS_PROXY", "https://example.org")
+
+        client = DefaultHttpxClient()
+
+        mounts = tuple(client._mounts.items())
+        assert len(mounts) == 1
+        assert mounts[0][0].pattern == "https://"
+
+    @pytest.mark.filterwarnings("ignore:.*deprecated.*:DeprecationWarning")
+    def test_default_client_creation(self) -> None:
+        # Ensure that the client can be initialized without any exceptions
+        DefaultHttpxClient(
+            verify=True,
+            cert=None,
+            trust_env=True,
+            http1=True,
+            http2=False,
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        )
 
     @pytest.mark.respx(base_url=base_url)
     def test_follow_redirects(self, respx_mock: MockRouter) -> None:
@@ -1100,6 +1107,7 @@ class TestAsyncAcctest:
             copy_param = copy_signature.parameters.get(name)
             assert copy_param is not None, f"copy() signature is missing the {name} param"
 
+    @pytest.mark.skipif(sys.version_info >= (3, 10), reason="fails because of a memory leak that started from 3.12")
     def test_copy_build_request(self) -> None:
         options = FinalRequestOptions(method="get", url="/foo")
 
@@ -1625,86 +1633,73 @@ class TestAsyncAcctest:
 
     @mock.patch("acctest._base_client.BaseClient._calculate_retry_timeout", _low_retry_timeout)
     @pytest.mark.respx(base_url=base_url)
-    async def test_retrying_timeout_errors_doesnt_leak(self, respx_mock: MockRouter) -> None:
+    async def test_retrying_timeout_errors_doesnt_leak(
+        self, respx_mock: MockRouter, async_client: AsyncAcctest
+    ) -> None:
         respx_mock.post("/chat/completions").mock(side_effect=httpx.TimeoutException("Test timeout error"))
 
         with pytest.raises(APITimeoutError):
-            await self.client.post(
-                "/chat/completions",
-                body=cast(
-                    object,
-                    maybe_transform(
-                        dict(
-                            frequency_penalty=0,
-                            logprobs=True,
-                            max_tokens=0,
-                            messages=[
-                                {
-                                    "content": "content",
-                                    "role": "role",
-                                }
-                            ],
-                            model="REPLACE_ME",
-                            presence_penalty=0,
-                            response_format={"type": "type"},
-                            stop=None,
-                            stream=True,
-                            stream_options=None,
-                            temperature=0,
-                            tool_choice="REPLACE_ME",
-                            tools=None,
-                            top_logprobs=None,
-                            top_p=0,
-                        ),
-                        ChatCreateCompletionParams,
-                    ),
-                ),
-                cast_to=httpx.Response,
-                options={"headers": {RAW_RESPONSE_HEADER: "stream"}},
-            )
+            await async_client.chat.with_streaming_response.create_completion(
+                frequency_penalty=0,
+                logprobs=False,
+                max_tokens=2048,
+                messages=[
+                    {
+                        "content": "You are a helpful assistant",
+                        "role": "system",
+                    },
+                    {
+                        "content": "Hi",
+                        "role": "user",
+                    },
+                ],
+                model="deepseek-chat",
+                presence_penalty=0,
+                response_format={"type": "text"},
+                stop=None,
+                stream=False,
+                stream_options=None,
+                temperature=1,
+                tool_choice="none",
+                tools=None,
+                top_logprobs=None,
+                top_p=1,
+            ).__aenter__()
 
         assert _get_open_connections(self.client) == 0
 
     @mock.patch("acctest._base_client.BaseClient._calculate_retry_timeout", _low_retry_timeout)
     @pytest.mark.respx(base_url=base_url)
-    async def test_retrying_status_errors_doesnt_leak(self, respx_mock: MockRouter) -> None:
+    async def test_retrying_status_errors_doesnt_leak(self, respx_mock: MockRouter, async_client: AsyncAcctest) -> None:
         respx_mock.post("/chat/completions").mock(return_value=httpx.Response(500))
 
         with pytest.raises(APIStatusError):
-            await self.client.post(
-                "/chat/completions",
-                body=cast(
-                    object,
-                    maybe_transform(
-                        dict(
-                            frequency_penalty=0,
-                            logprobs=True,
-                            max_tokens=0,
-                            messages=[
-                                {
-                                    "content": "content",
-                                    "role": "role",
-                                }
-                            ],
-                            model="REPLACE_ME",
-                            presence_penalty=0,
-                            response_format={"type": "type"},
-                            stop=None,
-                            stream=True,
-                            stream_options=None,
-                            temperature=0,
-                            tool_choice="REPLACE_ME",
-                            tools=None,
-                            top_logprobs=None,
-                            top_p=0,
-                        ),
-                        ChatCreateCompletionParams,
-                    ),
-                ),
-                cast_to=httpx.Response,
-                options={"headers": {RAW_RESPONSE_HEADER: "stream"}},
-            )
-
+            await async_client.chat.with_streaming_response.create_completion(
+                frequency_penalty=0,
+                logprobs=False,
+                max_tokens=2048,
+                messages=[
+                    {
+                        "content": "You are a helpful assistant",
+                        "role": "system",
+                    },
+                    {
+                        "content": "Hi",
+                        "role": "user",
+                    },
+                ],
+                model="deepseek-chat",
+                presence_penalty=0,
+                response_format={"type": "text"},
+                stop=None,
+                stream=False,
+                stream_options=None,
+                temperature=1,
+                tool_choice="none",
+                tools=None,
+                top_logprobs=None,
+                top_p=1,
+            ).__aenter__()
         assert _get_open_connections(self.client) == 0
 
     @pytest.mark.parametrize("failures_before_success", [0, 2, 4])
@@ -1908,6 +1903,28 @@ class TestAsyncAcctest:
                     raise AssertionError("calling get_platform using asyncify resulted in a hung process")
 
                 time.sleep(0.1)
+
+    async def test_proxy_environment_variables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Test that the proxy environment variables are set correctly
+        monkeypatch.setenv("HTTPS_PROXY", "https://example.org")
+
+        client = DefaultAsyncHttpxClient()
+
+        mounts = tuple(client._mounts.items())
+        assert len(mounts) == 1
+        assert mounts[0][0].pattern == "https://"
+
+    @pytest.mark.filterwarnings("ignore:.*deprecated.*:DeprecationWarning")
+    async def test_default_client_creation(self) -> None:
+        # Ensure that the client can be initialized without any exceptions
+        DefaultAsyncHttpxClient(
+            verify=True,
+            cert=None,
+            trust_env=True,
+            http1=True,
+            http2=False,
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        )
 
     @pytest.mark.respx(base_url=base_url)
     async def test_follow_redirects(self, respx_mock: MockRouter) -> None:
