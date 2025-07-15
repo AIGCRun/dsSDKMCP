@@ -121,7 +121,6 @@ pip install --pre acctest[aiohttp]
 Then you can enable it by instantiating the client with `http_client=DefaultAioHttpClient()`:
 
 ```python
-import os
 import asyncio
 from acctest import DefaultAioHttpClient
 from acctest import AsyncAcctest
@@ -129,7 +128,7 @@ from acctest import AsyncAcctest
 
 async def main() -> None:
     async with AsyncAcctest(
-        api_key=os.environ.get("ACCTEST_API_KEY"),  # This is the default and can be omitted
+        api_key="My API Key",
         http_client=DefaultAioHttpClient(),
     ) as client:
         response = await client.chat.create_completion(
