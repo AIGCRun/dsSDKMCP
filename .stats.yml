@@ -1,4 +1,4 @@
 configured_endpoints: 4
 openapi_spec_url: https://storage.googleapis.com/stainless-sdk-openapi-specs/highflying%2Facctest-8812d9df1e1303c84deef426a3c9fd630b8f684e1bf615f6ec195622e7722e2b.yml
 openapi_spec_hash: 1c2adb134e899cd10ad4f3138522df1e
-config_hash: 83f4bebce95edcee62f1e45a832bdfa2
+config_hash: bf202e8679a23a732d58e595730a8643
